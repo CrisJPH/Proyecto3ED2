@@ -1,0 +1,92 @@
+#include <Arduino.h>
+#include <wire.h>
+#include <Adafruit_NeoPixel.h>
+#include <Temperature_LM75_Derived.h>
+#define LM75_ADDRESS 0x48 
+#define PIN 32          // Pin de datos del NeoPixel
+#define NUMPIXELS 8   // Número de LEDs en el NeoPixel
+
+void SensorI2C();
+float leerTemperatura();
+void cascadeEffect(float temperatura_final);
+
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+uint8_t delayMs = 50; 
+uint8_t red = 255;
+uint8_t green = 0;
+uint8_t blue = 0;
+
+
+void setup() {
+  // put your setup code here, to run once:
+  pixels.begin();  // Inicializa la tira de LEDs
+  pixels.clear();  // Apaga todos los LEDs al inicio
+  Serial.begin(9600);
+  Wire.begin();
+  Serial.println("Conexión con el LM75 iniciada");  // Cascada en rojo con 50 ms de retraso entre LEDs
+  delay(1000);                   // Pausa de 1 segundo entre repeticiones
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  float temperatura = leerTemperatura();
+  Serial.print("Temperatura: ");
+  Serial.print(temperatura);
+  Serial.println(" °C");
+  delay(1000);  // Lee la temperatura cada segundo
+  cascadeEffect(temperatura);
+  delay(1000);
+  
+}
+
+float leerTemperatura() {
+  Wire.beginTransmission(LM75_ADDRESS);
+  Wire.write(0x00);  // Registra de temperatura del LM75
+  Wire.endTransmission();
+  
+  Wire.requestFrom(LM75_ADDRESS, 2);  // Solicita 2 bytes de datos de temperatura
+
+  if (Wire.available() >= 2) {
+    int temp = Wire.read() << 8 | Wire.read();  // Lee y combina los dos bytes
+    return temp/256;  // Convierte a grados Celsius
+  } else {
+    Serial.println("Error al leer la temperatura");
+    return -1000;  // Valor de error
+  }
+}
+
+void cascadeEffect(float temperatura_final) {
+  if(temperatura_final <= 25){
+    for (int i = 0; i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, pixels.Color(0, 255, blue));  // Enciende el LED
+    pixels.show();                                           // Actualiza los LEDs
+    delay(delayMs);                                          // Espera
+  }
+  for (int i = 0; i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, 0);  // Apaga los LEDs
+  }
+  pixels.show();  // Actualiza los LEDs
+  }else if(temperatura_final == 26){
+    for (int i = 0; i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, pixels.Color(255, 255, blue));  // Enciende el LED
+    pixels.show();                                           // Actualiza los LEDs
+    delay(delayMs);                                          // Espera
+  }
+  for (int i = 0; i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, 0);  // Apaga los LEDs
+  }
+  pixels.show();  // Actualiza los LEDs
+
+}else if(temperatura_final >= 27){
+    for (int i = 0; i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, pixels.Color(red, green, blue));  // Enciende el LED
+    pixels.show();                                           // Actualiza los LEDs
+    delay(delayMs);                                          // Espera
+  }
+  for (int i = 0; i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, 0);  // Apaga los LEDs
+  }
+  pixels.show();  // Actualiza los LEDs
+
+}
+}
