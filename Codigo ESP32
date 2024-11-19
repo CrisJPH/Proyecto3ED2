@@ -1,92 +1,111 @@
 #include <Arduino.h>
-#include <wire.h>
-#include <Adafruit_NeoPixel.h>
-#include <Temperature_LM75_Derived.h>
-#define LM75_ADDRESS 0x48 
-#define PIN 32          // Pin de datos del NeoPixel
-#define NUMPIXELS 8   // Número de LEDs en el NeoPixel
+#include <Wire.h>  // Biblioteca para comunicación I2C
+#include <Adafruit_NeoPixel.h>  // Biblioteca para controlar tiras NeoPixel
+#include <Temperature_LM75_Derived.h>  // Biblioteca para trabajar con el sensor LM75
 
+#define LM75_ADD 0x48  // Dirección I2C del sensor LM75
+#define PIN 32         // Pin de datos para la tira NeoPixel
+#define NUMPIXELS 8    // Número de LEDs en la tira NeoPixel
+
+// Declaración de funciones
 void SensorI2C();
 float leerTemperatura();
 void cascadeEffect(float temperatura_final);
 
+// Configuración de la tira NeoPixel
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
-uint8_t delayMs = 50; 
-uint8_t red = 255;
-uint8_t green = 0;
-uint8_t blue = 0;
 
+// Variables para colores y efectos
+uint8_t delayMs = 50;  // Tiempo de retardo entre cambios de LEDs (en milisegundos)
+uint8_t red = 255;     // Valor inicial del color rojo
+uint8_t green = 0;     // Valor inicial del color verde
+uint8_t blue = 0;      // Valor inicial del color azul
 
 void setup() {
-  // put your setup code here, to run once:
-  pixels.begin();  // Inicializa la tira de LEDs
+  // Inicializa la tira NeoPixel
+  pixels.begin();  
   pixels.clear();  // Apaga todos los LEDs al inicio
-  Serial.begin(9600);
-  Wire.begin();
-  Serial.println("Conexión con el LM75 iniciada");  // Cascada en rojo con 50 ms de retraso entre LEDs
-  delay(1000);                   // Pausa de 1 segundo entre repeticiones
+  
+  // Configura los puertos seriales
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);  // Serial2 con pines personalizados para el ESP32
+  Serial.begin(9600);  // Monitor serial
+  
+  // Inicializa la comunicación I2C
+  Wire.begin();  
+  Serial.println("Conexión con el LM75 iniciada");  // Mensaje de inicio
+  
+  delay(1000);  // Pausa inicial de 1 segundo
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  float temperatura = leerTemperatura();
-  Serial.print("Temperatura: ");
-  Serial.print(temperatura);
-  Serial.println(" °C");
-  delay(1000);  // Lee la temperatura cada segundo
-  cascadeEffect(temperatura);
-  delay(1000);
-  
+  // Verifica si hay datos disponibles en el puerto Serial2
+  if (Serial2.available()) {
+    char command = Serial2.read();  // Lee un carácter del STM32
+    if (command == 'S') {           // Si el comando recibido es 'S'
+      delay(1000);  // Espera un segundo
+
+      // Lee la temperatura y ejecuta el efecto de cascada
+      float temperatura = leerTemperatura();
+      cascadeEffect(temperatura);
+
+      // Imprime y envía la temperatura al monitor serial y al STM32
+      Serial.print("Temperatura: ");
+      Serial.print(temperatura);
+      Serial2.print(temperatura);
+      Serial.println(" °C");
+
+      delay(1000);  // Pausa de 1 segundo antes de la próxima lectura
+    }
+  }
 }
 
+// Función para leer la temperatura del LM75
 float leerTemperatura() {
-  Wire.beginTransmission(LM75_ADDRESS);
-  Wire.write(0x00);  // Registra de temperatura del LM75
+  Wire.beginTransmission(LM75_ADD);  // Inicia la transmisión con el LM75
+  Wire.write(0x00);                 // Solicita el registro de temperatura
   Wire.endTransmission();
-  
-  Wire.requestFrom(LM75_ADDRESS, 2);  // Solicita 2 bytes de datos de temperatura
 
-  if (Wire.available() >= 2) {
-    int temp = Wire.read() << 8 | Wire.read();  // Lee y combina los dos bytes
-    return temp/256;  // Convierte a grados Celsius
+  Wire.requestFrom(LM75_ADD, 2);    // Solicita 2 bytes de datos del LM75
+
+  if (Wire.available() >= 2) {      // Verifica si hay al menos 2 bytes disponibles
+    int temp = Wire.read() << 8 | Wire.read();  // Combina los dos bytes en un entero
+    return temp / 256.0;            // Convierte el valor a grados Celsius
   } else {
-    Serial.println("Error al leer la temperatura");
-    return -1000;  // Valor de error
+    Serial.println("Error al leer la temperatura");  // Mensaje de error si no hay datos
+    return -100;  // Devuelve un valor de error
   }
 }
 
+// Función para ejecutar el efecto en cascada basado en la temperatura
 void cascadeEffect(float temperatura_final) {
-  if(temperatura_final <= 25){
+  // Caso 1: Temperatura baja (<= 22 °C)
+  if (temperatura_final <= 22) {
     for (int i = 0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, pixels.Color(0, 255, blue));  // Enciende el LED
-    pixels.show();                                           // Actualiza los LEDs
-    delay(delayMs);                                          // Espera
-  }
-  for (int i = 0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, 0);  // Apaga los LEDs
-  }
-  pixels.show();  // Actualiza los LEDs
-  }else if(temperatura_final == 26){
+      pixels.setPixelColor(i, pixels.Color(0, 255, blue));  // LEDs en color verde
+      pixels.show();  // Actualiza los LEDs
+      delay(delayMs);  // Retardo entre LEDs
+    }
+    pixels.clear();  // Apaga los LEDs al final
+    pixels.show();
+  } 
+  // Caso 2: Temperatura moderada (== 23 °C)
+  else if (temperatura_final == 23) {
     for (int i = 0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, pixels.Color(255, 255, blue));  // Enciende el LED
-    pixels.show();                                           // Actualiza los LEDs
-    delay(delayMs);                                          // Espera
-  }
-  for (int i = 0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, 0);  // Apaga los LEDs
-  }
-  pixels.show();  // Actualiza los LEDs
-
-}else if(temperatura_final >= 27){
+      pixels.setPixelColor(i, pixels.Color(255, 255, blue));  // LEDs en color blanco
+      pixels.show();  // Actualiza los LEDs
+      delay(delayMs);  // Retardo entre LEDs
+    }
+    pixels.clear();  // Apaga los LEDs al final
+    pixels.show();
+  } 
+  // Caso 3: Temperatura alta (> 23 °C)
+  else if (temperatura_final > 23) {
     for (int i = 0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, pixels.Color(red, green, blue));  // Enciende el LED
-    pixels.show();                                           // Actualiza los LEDs
-    delay(delayMs);                                          // Espera
+      pixels.setPixelColor(i, pixels.Color(red, green, blue));  // LEDs en color rojo
+      pixels.show();  // Actualiza los LEDs
+      delay(delayMs);  // Retardo entre LEDs
+    }
+    pixels.clear();  // Apaga los LEDs al final
+    pixels.show();
   }
-  for (int i = 0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, 0);  // Apaga los LEDs
-  }
-  pixels.show();  // Actualiza los LEDs
-
-}
 }
